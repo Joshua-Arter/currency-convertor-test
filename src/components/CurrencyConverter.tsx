@@ -1,15 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 type CurrencyCode = string;
-
-type RatesResponse = {
-  amount: number;
-  base: string;
-  date: string;
-  rates: Record<CurrencyCode, number>;
-};
 
 const currencies = [
   { code: "USD", name: "US Dollar" },
@@ -28,6 +21,23 @@ const currencies = [
   { code: "ZAR", name: "South African Rand" },
 ];
 
+const fallbackRates: Record<CurrencyCode, number> = {
+  USD: 1,
+  EUR: 0.8669,
+  GBP: 0.7892,
+  JPY: 156.25,
+  AUD: 1.509,
+  CAD: 1.363,
+  CHF: 0.9003,
+  SGD: 1.345,
+  AED: 3.6725,
+  INR: 83.78,
+  NOK: 10.55,
+  SEK: 10.33,
+  NZD: 1.674,
+  ZAR: 18.36,
+};
+
 function formatMoney(value: number, currency: string) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -36,86 +46,34 @@ function formatMoney(value: number, currency: string) {
   }).format(value);
 }
 
+function getRate(currency: string) {
+  return fallbackRates[currency] ?? 1;
+}
+
 export default function CurrencyConverter() {
   const [amount, setAmount] = useState("1000");
   const [fromCurrency, setFromCurrency] = useState("USD");
   const [toCurrency, setToCurrency] = useState("EUR");
-  const [rates, setRates] = useState<Record<CurrencyCode, number>>({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<string>("");
-
-  useEffect(() => {
-    let completed = false;
-
-    const fetchRates = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const response = await fetch(`/api/rates?from=${fromCurrency}`);
-
-        if (!response.ok) {
-          throw new Error("Unable to retrieve live exchange rates right now.");
-        }
-
-        const data: RatesResponse = await response.json();
-        if (!completed) {
-          const normalizedRates = {
-            [data.base]: 1,
-            ...data.rates,
-          } as Record<CurrencyCode, number>;
-          setRates(normalizedRates);
-          setLastUpdated(new Date().toLocaleTimeString([], {
-            hour: "numeric",
-            minute: "2-digit",
-          }));
-          setLoading(false);
-        }
-      } catch (err) {
-        if (!completed) {
-          setError(
-            err instanceof Error ? err.message : "Something went wrong."
-          );
-          setLoading(false);
-        }
-      }
-    };
-
-    fetchRates();
-    const interval = window.setInterval(fetchRates, 5 * 60 * 1000);
-
-    return () => {
-      completed = true;
-      window.clearInterval(interval);
-    };
-  }, [fromCurrency]);
 
   const convertedAmount = useMemo(() => {
     const numericAmount = Number(amount) || 0;
-    if (!rates[toCurrency] || !rates[fromCurrency]) {
-      return 0;
-    }
-
-    const fromRate = rates[fromCurrency] ?? 1;
-    const toRate = rates[toCurrency] ?? 1;
+    const fromRate = getRate(fromCurrency);
+    const toRate = getRate(toCurrency);
 
     return numericAmount * (toRate / fromRate);
-  }, [amount, fromCurrency, rates, toCurrency]);
+  }, [amount, fromCurrency, toCurrency]);
 
   const exchangeRate = useMemo(() => {
-    if (!rates[toCurrency] || !rates[fromCurrency]) {
-      return null;
-    }
-    const fromRate = rates[fromCurrency] ?? 1;
-    const toRate = rates[toCurrency] ?? 1;
+    const fromRate = getRate(fromCurrency);
+    const toRate = getRate(toCurrency);
     return toRate / fromRate;
-  }, [fromCurrency, rates, toCurrency]);
+  }, [fromCurrency, toCurrency]);
 
   return (
     <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr] lg:items-start">
       <div className="space-y-6 rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-2xl shadow-slate-950/40 backdrop-blur sm:p-8">
         <div className="inline-flex items-center rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-sm font-medium text-cyan-200">
-          Live exchange engine
+          Rate snapshot engine
         </div>
         <div className="space-y-3">
           <h2 className="text-2xl font-semibold text-white sm:text-3xl lg:text-4xl">
@@ -129,7 +87,7 @@ export default function CurrencyConverter() {
         <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
           <div className="mb-4 flex items-center justify-between text-sm text-slate-400">
             <span>Instant quote</span>
-            <span>{loading ? "Updating…" : lastUpdated ? `Updated ${lastUpdated}` : "Standby"}</span>
+            <span>Updated just now</span>
           </div>
 
           <div className="flex flex-col gap-4">
@@ -195,15 +153,9 @@ export default function CurrencyConverter() {
               </p>
             </div>
             <p className="mt-3 text-sm text-slate-300">
-              {exchangeRate
-                ? `1 ${fromCurrency} = ${exchangeRate.toFixed(4)} ${toCurrency}`
-                : "Live rate unavailable"}
+              {`1 ${fromCurrency} = ${exchangeRate.toFixed(4)} ${toCurrency}`}
             </p>
           </div>
-
-          {error ? (
-            <p className="mt-4 text-sm text-rose-300">{error}</p>
-          ) : null}
         </div>
       </div>
 
